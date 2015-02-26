@@ -18,6 +18,7 @@ def service_response(f):
             "hydra": "http://www.w3.org/ns/hydra/core#",
             "operation": "hydra:operation",
             "method": "hydra:method",
+            "expects": "hydra:expects", 
             "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
             "User": "vocab:User",
             "Index": "vocab:Index",
@@ -26,9 +27,12 @@ def service_response(f):
             "time": "vocab:time",
             "locked": "vocab:locked",
             "timestatus": "vocab:timestatus",
+            "start": "xhtml:start",
+            "xhtml": "http://www.w3.org/1999/xhtml/vocab#",
         }
         if data:
             data['@context'] = CONTEXT
+            data['start'] = url_for("index", _external=True)
             return jsonify(data)
         else:
             return Response(status=404)
@@ -59,6 +63,9 @@ def App():
                             "@id": "timestatus", 
                             "@type": "hydra:Link",
                             "rdfs:range": "TimeStatus"
+                        },
+                        {
+                            "@id": "username"
                         }
                     ]
                 },
@@ -68,12 +75,16 @@ def App():
                         {
                             "@id": "time", 
                             "rdfs:domain": "TimeStatus",
-                            "rdfs:comment": "used time in seconds"
+                            "rdfs:comment": "used time in seconds",
                         },
                         {
                             "@id": "locked", 
                             "rdfs:domain": "TimeStatus",
                             "rdfs:comment": "is the user currently locked out"
+                        },
+                        {
+                            "@id": "user", 
+                            "@type": "hydra:Link"
                         },
                     ]
                 },
@@ -87,6 +98,7 @@ def App():
     def index():
         return _index_data(
             app.config['q'],
+            url_for("index", _external=True), 
             lambda u: url_for("user", username=u.username, _external=True)
         )
 
@@ -101,6 +113,18 @@ def App():
             url_for("put_timestatus", username=username, _external=True), 
         )
 
+
+    @app.route("/user/<username>/timestatus")
+    @service_response
+    def timestatus(username):
+        q = app.config['q']
+        user = q.io_user(username)
+        if user:
+            return _map_time_status(
+                url_for("user", username=username, _external=True),
+                url_for("timestatus", username=username, _external=True),
+                q.io_timestatus(username)
+            )
 
     @app.route("/user/<username>/timestatus", methods=["PUT"])
     def put_timestatus(username):
@@ -147,14 +171,16 @@ class MockQ(object):
         self.data['timestatus'][username] = timestatus
 
 
-def _index_data(q, user_url_cb):
+def _index_data(q, url, user_url_cb):
     """
     >>> q = MockQ([queries.User("eric")], {})
     
-    >>> _index_data(q, lambda u: "/users/" + u.username)
-    {'user': [{'username': 'eric', '@id': '/users/eric'}]}
+    >>> _index_data(q, "/", lambda u: "/users/" + u.username)
+    {'@type': 'Index', 'user': [{'username': 'eric', '@id': '/users/eric', '@type': 'User'}]}
     """
     return {
+        "@type": "Index", 
+        "@id": url,
         "user": map(
             lambda user: _map_user(user_url_cb(user), user),
             q.io_user_list()
@@ -174,8 +200,7 @@ def _user_data(q, username, user_url, timestatus_url):
     ...   "/user/eric",
     ...   "/user/eric/timestatus"
     ... )
-    {'username': 'eric', 'timestatus': {'locked': False, 'operation': [{'@type': 'hydra:CreateResourceOperation', 'method': 'PUT'}], '@id': '/user/eric/timestatus', 'time': 10}, '@id': '/user/eric'}
-
+    {'username': 'eric', 'timestatus': {'locked': False, 'operation': [{'@type': 'hydra:CreateResourceOperation', 'method': 'PUT'}], '@id': '/user/eric/timestatus', '@type': 'TimeStatus', 'time': 10}, '@id': '/user/eric', '@type': 'User'}
     >>> _user_data(
     ...   q,
     ...   "nobody", 
@@ -188,6 +213,7 @@ def _user_data(q, username, user_url, timestatus_url):
     if user_record:
         user = _map_user(user_url, user_record)
         user['timestatus'] = _map_time_status(
+            user_url,
             timestatus_url,
             q.io_timestatus(user_record.username)
         )
@@ -197,19 +223,23 @@ def _user_data(q, username, user_url, timestatus_url):
 def _map_user(url, user):
     return {
         "@id": url,
+        "@type": "User", 
         "username": user.username
     }
 
 
-def _map_time_status(url, timestatus):
+def _map_time_status(user_url, url, timestatus):
     return {
         "@id": url,
+        "@type": "TimeStatus",
+        "user": user_url,
         "time": timestatus.time,
         "locked": timestatus.locked,
         "operation": [
             {
                 "@type": "hydra:CreateResourceOperation",
-                "method": "PUT"
+                "method": "PUT",
+                "expects": "TimeStatus"
             }
         ]
     }
