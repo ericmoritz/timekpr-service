@@ -13,7 +13,22 @@ def service_response(f):
     @wraps(f)
     def inner(*args, **kwargs):
         data = f(*args, **kwargs)
+        CONTEXT = {
+            "vocab": url_for("vocab", _external=True) + "#",
+            "hydra": "http://www.w3.org/ns/hydra/core#",
+            "operation": "hydra:operation",
+            "method": "hydra:method",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "User": "vocab:User",
+            "Index": "vocab:Index",
+            "TimeStatus": "vocab:TimeStatus",
+            "user": "vocab:user",
+            "time": "vocab:time",
+            "locked": "vocab:locked",
+            "timestatus": "vocab:timestatus",
+        }
         if data:
+            data['@context'] = CONTEXT
             return jsonify(data)
         else:
             return Response(status=404)
@@ -23,12 +38,56 @@ def App():
 
     app = Flask(__name__)
 
+    @app.route("/vocab")
+    @service_response
+    def vocab():
+        return {
+            "hydra:supportedClass": [
+                {
+                    "@id": "Index",
+                    "hydra:supportedProperty": [
+                        {
+                            "@id": "user", 
+                            "@type": "hydra:Link"
+                        }
+                    ]
+                },
+                {
+                    "@id": "User",
+                    "hydra:supportedProperty": [
+                        {
+                            "@id": "timestatus", 
+                            "@type": "hydra:Link",
+                            "rdfs:range": "TimeStatus"
+                        }
+                    ]
+                },
+                {
+                    "@id": "TimeStatus",
+                    "hydra:supportedProperty": [
+                        {
+                            "@id": "time", 
+                            "rdfs:domain": "TimeStatus",
+                            "rdfs:comment": "used time in seconds"
+                        },
+                        {
+                            "@id": "locked", 
+                            "rdfs:domain": "TimeStatus",
+                            "rdfs:comment": "is the user currently locked out"
+                        },
+                    ]
+                },
+                
+                
+            ]
+    }
+
     @app.route("/")
     @service_response
     def index():
         return _index_data(
             app.config['q'],
-            lambda u: url_for("user", username=u.username)
+            lambda u: url_for("user", username=u.username, _external=True)
         )
 
 
@@ -38,8 +97,8 @@ def App():
         return _user_data(
             app.config['q'], 
             username,
-            url_for("user", username=username),
-            url_for("put_timestatus", username=username), 
+            url_for("user", username=username, _external=True),
+            url_for("put_timestatus", username=username, _external=True), 
         )
 
 
