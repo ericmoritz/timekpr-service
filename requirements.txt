@@ -8,3 +8,5 @@ py==1.4.26
 pytest==2.6.4
 python-pam==1.8.2
 wsgiref==0.1.2
+-e timekpr/
+pyparsing==2.0.3

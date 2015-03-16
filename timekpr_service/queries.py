@@ -5,6 +5,7 @@ import re
 import timekpr_service.dirs as dirs
 import os
 from logging import getLogger
+from timekpr import pam
 
 User = namedtuple("User", ["username"])
 TimeStatus = namedtuple("TimeStatus", ["time", "locked"])
@@ -88,10 +89,12 @@ def io_update_timestatus(username, new_time_status):
     if time_status.locked:
         with open(lockf, "w") as fh:
             fh.write("")
+        pam.lockuser(username)
     else:
         _rm(lockf)
         _rm(logoutf)
         _rm(latef)
+        pam.unlockuser(username)
 
     with open(timef, "w") as fh:
         fh.write(str(time_status.time))
